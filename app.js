@@ -73,6 +73,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
 
 let meMarker = null;
 let myPosition = null;
+let debugGpsOverride = false;  // si true, watchPosition n'écrase pas myPosition (mode debug)
 
 function updateMyPosition(lat, lng, accuracy) {
   myPosition = { lat, lng, accuracy };
@@ -105,6 +106,7 @@ function startGeolocation() {
   gpsTextEl.textContent = 'recherche GPS…';
   gpsWatchId = navigator.geolocation.watchPosition(
     pos => {
+      if (debugGpsOverride) return;  // le mode debug tient les rênes
       const { latitude, longitude, accuracy } = pos.coords;
       gpsStatusEl.classList.remove('error');
       gpsStatusEl.classList.add('active');
@@ -202,8 +204,16 @@ function openDebugPanel() {
     btn.addEventListener('click', () => {
       const c = CREATURES.find(x => x.id === btn.dataset.id);
       if (c) {
+        // Vraie simulation GPS : téléporte myPosition aux coords de la créature.
+        // updateMyPosition() met à jour le marker + déclenche checkProximity()
+        // → la scène s'ouvre naturellement via la logique de proximité (< 25 m).
+        debugGpsOverride = true;
+        gpsStatusEl.classList.remove('error');
+        gpsStatusEl.classList.add('active');
+        gpsTextEl.textContent = `GPS simulé (${c.name})`;
+        map.setView([c.gps.lat, c.gps.lng], 18);
+        updateMyPosition(c.gps.lat, c.gps.lng, 5);
         debugPanelEl.classList.remove('open');
-        openCreatureScene(c);
       }
     });
   });
@@ -217,6 +227,20 @@ document.getElementById('debug-reset').addEventListener('click', () => {
   refreshPokedexCount();
   toast('Pokédex réinitialisé');
 });
+// Bouton "GPS réel" — restaure la vraie géoloc après un test debug
+const debugPanelHtml = debugPanelEl.querySelector('.debug-section');
+if (debugPanelHtml && !document.getElementById('debug-real-gps')) {
+  const realBtn = document.createElement('button');
+  realBtn.id = 'debug-real-gps';
+  realBtn.className = 'debug-btn';
+  realBtn.textContent = '📍 Repasser en GPS réel';
+  debugPanelHtml.insertBefore(realBtn, debugPanelHtml.firstChild);
+  realBtn.addEventListener('click', () => {
+    debugGpsOverride = false;
+    gpsTextEl.textContent = 'recherche GPS…';
+    toast('GPS réel réactivé');
+  });
+}
 
 // ============================================================
 // CREATURE SCENE (Three.js + swipe Pokéball)
@@ -241,8 +265,10 @@ scene3D.environment = env;
 scene3D.environmentIntensity = 1.0;
 
 const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 100);
-camera.position.set(0, 0.5, 4);
-camera.lookAt(0, 0.2, 0);
+// Reculée de z=4 à z=5.5 pour cadrer les créatures élancées (oreilles, bec, tête)
+// sans qu'elles débordent sur le HUD. Position Y remontée aussi pour bien centrer verticalement.
+camera.position.set(0, 0.8, 5.5);
+camera.lookAt(0, 0.35, 0);
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.8);
 const dir = new THREE.DirectionalLight(0xffffff, 1.5);
