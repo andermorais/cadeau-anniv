@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Cadeau Gui" />
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
 <title>Cadeau Guillaume 🌸</title>
 
 <style>
@@ -56,16 +56,17 @@
 
   /* ---------------- MAP ---------------- */
   #map { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1; }
-  .leaflet-container { background: #1a1730 !important; outline: none; }
-  .leaflet-control-attribution { font-size: 9px; opacity: 0.5; }
+  .maplibregl-map { background: #cfe0d3 !important; outline: none; }
+  .maplibregl-ctrl-attrib { font-size: 9px !important; opacity: 0.55; background: rgba(255,255,255,0.6) !important; }
+  .maplibregl-ctrl-attrib a { color: #333 !important; }
 
-  /* Custom Leaflet "you are here" marker */
+  /* Custom "you are here" marker (MapLibre ancré au centre nativement) */
   .me-marker {
     width: 18px; height: 18px; border-radius: 50%;
     background: #4a9eff;
     border: 3px solid white;
     box-shadow: 0 0 0 8px rgba(74, 158, 255, 0.15), 0 2px 8px rgba(0,0,0,0.4);
-    transform: translate(-9px, -9px);
+    position: relative;
   }
   .me-marker.pulse::before {
     content: ''; position: absolute; inset: -6px;
@@ -195,7 +196,7 @@
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     margin: 0 0 4px;
   }
-  .memory-place { font-size: 14px; color: var(--text-dim); margin-bottom: 18px; }
+  .memory-place { display: none; }  /* lieu non affiché — le jardin entier est le lieu */
   .memory-tagline {
     font-size: 18px; font-style: italic; color: var(--accent);
     line-height: 1.4; margin-bottom: 24px;
@@ -316,40 +317,73 @@
     background: var(--bg);
     display: none;
     flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 40px 28px;
-    text-align: center;
+    padding: calc(var(--safe-top) + 24px) 24px calc(var(--safe-bottom) + 24px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   #intro.open { display: flex; }
-  #intro .icon { font-size: 64px; margin-bottom: 24px; }
+  #intro .icon { font-size: 56px; margin: 12px auto 18px; text-align: center; }
   #intro h1 {
-    font-size: 28px; margin: 0 0 16px;
+    font-size: 26px; margin: 0 0 20px; text-align: center;
     background: linear-gradient(180deg, var(--accent), var(--accent-2));
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   }
-  #intro p { font-size: 16px; color: var(--text-dim); line-height: 1.6; margin: 0 0 12px; max-width: 320px; }
-  #intro .intro-actions { margin-top: 32px; display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 280px; }
+  #intro .intro-lead { font-size: 16px; color: var(--text); line-height: 1.6; margin: 0 0 24px; text-align: center; max-width: 360px; margin-left: auto; margin-right: auto; }
+  #intro .step {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px 18px; margin: 0 auto 14px; max-width: 400px;
+  }
+  #intro .step h2 {
+    font-size: 15px; margin: 0 0 8px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700;
+  }
+  #intro .step p { font-size: 15px; color: var(--text); line-height: 1.55; margin: 0 0 8px; }
+  #intro .step p:last-child { margin-bottom: 0; }
+  #intro .step .em { color: var(--accent-2); font-weight: 600; }
+  #intro .warn {
+    border-color: var(--accent-2);
+    background: linear-gradient(135deg, rgba(255,126,182,0.08), rgba(247,201,72,0.05));
+  }
+  #intro .intro-actions { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 400px; margin-left: auto; margin-right: auto; }
   #intro button {
     background: linear-gradient(135deg, var(--accent), var(--accent-2));
-    border: none; color: #2d2400; padding: 14px; border-radius: 12px;
+    border: none; color: #2d2400; padding: 16px; border-radius: 12px;
     font-size: 16px; font-weight: 700; cursor: pointer;
   }
+  #intro .intro-footer { margin-top: 16px; font-size: 12px; color: var(--text-dim); text-align: center; opacity: 0.7; }
 </style>
 </head>
 
 <body>
 
-  <!-- Intro / Bienvenue -->
+  <!-- Intro / Bienvenue + Installation -->
   <div id="intro">
     <div class="icon">🌸</div>
     <h1>Joyeux anniversaire Gui</h1>
-    <p>Quelque part dans ce jardin, six créatures attendent.</p>
-    <p>Chacune cache un morceau de notre histoire.</p>
-    <p>Promène-toi. Garde le téléphone à la main.</p>
-    <p>Le reste se passera tout seul. ♥</p>
-    <div class="intro-actions">
-      <button id="intro-start">Commencer</button>
+    <p class="intro-lead">Quelque part dans le jardin du Luxembourg, six créatures attendent. Chacune cache un morceau de notre histoire. ♥</p>
+
+    <div class="step warn">
+      <h2>1 · Installe-moi (2 min, à la maison)</h2>
+      <p>Appuie sur le bouton <span class="em">Partager</span> ↑ en bas de Safari, puis choisis <span class="em">« Sur l'écran d'accueil »</span> et confirme.</p>
+      <p>Une icône <span class="em">🌸 Cadeau Gui</span> apparaît sur ton téléphone. Lance-moi depuis là — pas depuis Safari.</p>
     </div>
+
+    <div class="step">
+      <h2>2 · Charge-moi en WiFi</h2>
+      <p>La première ouverture doit se faire <span class="em">chez toi, en WiFi</span>. Laisse la carte s'afficher, attends que le badge GPS devienne vert. Après ça, je fonctionne partout, même sans réseau.</p>
+      <p>Quand je demande <span class="em">ta position</span>, réponds « Autoriser ». Sinon, les créatures ne sauront pas que tu es là.</p>
+    </div>
+
+    <div class="step">
+      <h2>3 · Rendez-vous au Luxembourg</h2>
+      <p>Promène-toi avec l'écran allumé. Quand tu approches d'un point de la carte, une créature apparaît en 3D. <span class="em">Swipe la Pokéball vers le haut</span> pour la capturer.</p>
+      <p>Une carte-souvenir se dévoile alors. Recommence pour les six.</p>
+    </div>
+
+    <div class="intro-actions">
+      <button id="intro-start">C'est parti ♥</button>
+    </div>
+    <div class="intro-footer">— A.</div>
   </div>
 
   <!-- Map base -->
@@ -438,7 +472,7 @@
   <div class="toast" id="toast">—</div>
 
 <!-- ============ SCRIPTS ============ -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script type="importmap">
 {
   "imports": {

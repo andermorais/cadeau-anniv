@@ -22,6 +22,9 @@ import { CREATURES, CAPTURE_RADIUS, MAP_CENTER, MAP_ZOOM, distanceMeters } from 
 const STATE_KEY = 'cadeau-gui-state-v1';
 const INTRO_SEEN_KEY = 'cadeau-gui-intro-seen-v1';
 
+// Mode debug — activé uniquement via ?debug=1 (Gui n'a pas ce paramètre dans son lien)
+const DEBUG_MODE = new URLSearchParams(location.search).get('debug') === '1';
+
 // ---------- State persistance ----------
 function loadState() {
   try { return JSON.parse(localStorage.getItem(STATE_KEY)) || { captured: [] }; }
@@ -50,7 +53,8 @@ function toast(msg, duration = 1800) {
 
 // ---------- INTRO ----------
 const introEl = document.getElementById('intro');
-if (!localStorage.getItem(INTRO_SEEN_KEY)) {
+// En mode debug, on force l'intro à s'afficher pour permettre de la revoir
+if (DEBUG_MODE || !localStorage.getItem(INTRO_SEEN_KEY)) {
   introEl.classList.add('open');
 }
 document.getElementById('intro-start').addEventListener('click', () => {
@@ -59,17 +63,18 @@ document.getElementById('intro-start').addEventListener('click', () => {
   startGeolocation();
 });
 
-// ---------- MAP ----------
-const map = L.map('map', {
-  zoomControl: false,
+// ---------- MAP (MapLibre GL + OpenFreeMap Liberty, style clair 3D bâtiments) ----------
+const map = new maplibregl.Map({
+  container: 'map',
+  style: 'https://tiles.openfreemap.org/styles/liberty',
+  center: [MAP_CENTER.lng, MAP_CENTER.lat],  // MapLibre = [lng, lat]
+  zoom: MAP_ZOOM,
+  pitch: 55,           // vue tiltée style Pokémon GO
+  bearing: 0,
   attributionControl: true,
-}).setView([MAP_CENTER.lat, MAP_CENTER.lng], MAP_ZOOM);
-
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution: '© OpenStreetMap © CARTO',
-  maxZoom: 19,
-  subdomains: 'abcd',
-}).addTo(map);
+  interactive: false,  // Gui ne peut pas déplacer/zoomer la carte manuellement (elle suit sa position)
+  cooperativeGestures: false,
+});
 
 let meMarker = null;
 let myPosition = null;
@@ -78,16 +83,14 @@ let debugGpsOverride = false;  // si true, watchPosition n'écrase pas myPositio
 function updateMyPosition(lat, lng, accuracy) {
   myPosition = { lat, lng, accuracy };
   if (!meMarker) {
-    meMarker = L.marker([lat, lng], {
-      icon: L.divIcon({
-        className: 'me-marker-wrapper',
-        html: '<div class="me-marker pulse"></div>',
-        iconSize: [0, 0],
-      }),
-    }).addTo(map);
-    map.setView([lat, lng], 18);
+    const el = document.createElement('div');
+    el.className = 'me-marker pulse';
+    meMarker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([lng, lat])
+      .addTo(map);
+    map.flyTo({ center: [lng, lat], zoom: 18, essential: true });
   } else {
-    meMarker.setLatLng([lat, lng]);
+    meMarker.setLngLat([lng, lat]);
   }
   checkProximity();
 }
@@ -181,18 +184,21 @@ document.getElementById('pokedex-open').addEventListener('click', openPokedex);
 document.getElementById('pokedex-close').addEventListener('click', () => pokedexEl.classList.remove('open'));
 
 // ---------- DEBUG (triple-tap logo) ----------
+// Actif uniquement si DEBUG_MODE (URL ?debug=1). Sinon rien ne se passe au triple-tap.
 const logoEl = document.getElementById('logo');
 const debugPanelEl = document.getElementById('debug-panel');
-let logoTaps = 0; let logoTapTimer;
-logoEl.addEventListener('click', () => {
-  logoTaps++;
-  clearTimeout(logoTapTimer);
-  logoTapTimer = setTimeout(() => { logoTaps = 0; }, 600);
-  if (logoTaps >= 3) {
-    logoTaps = 0;
-    openDebugPanel();
-  }
-});
+if (DEBUG_MODE) {
+  let logoTaps = 0; let logoTapTimer;
+  logoEl.addEventListener('click', () => {
+    logoTaps++;
+    clearTimeout(logoTapTimer);
+    logoTapTimer = setTimeout(() => { logoTaps = 0; }, 600);
+    if (logoTaps >= 3) {
+      logoTaps = 0;
+      openDebugPanel();
+    }
+  });
+}
 
 function openDebugPanel() {
   const list = document.getElementById('debug-list');
@@ -211,7 +217,7 @@ function openDebugPanel() {
         gpsStatusEl.classList.remove('error');
         gpsStatusEl.classList.add('active');
         gpsTextEl.textContent = `GPS simulé (${c.name})`;
-        map.setView([c.gps.lat, c.gps.lng], 18);
+        map.flyTo({ center: [c.gps.lng, c.gps.lat], zoom: 18, essential: true });
         updateMyPosition(c.gps.lat, c.gps.lng, 5);
         debugPanelEl.classList.remove('open');
       }
@@ -477,7 +483,8 @@ let typewriterToken = 0;
 function showMemoryCard(creature, skipTypewriter = false) {
   memoryPhotoEl.style.setProperty('--photo-url', `url('${creature.capturePhoto}')`);
   memoryNameEl.textContent = creature.name;
-  memoryPlaceEl.textContent = creature.place;
+  // Le nom du lieu n'est plus affiché (le jardin entier = le lieu du jeu)
+  memoryPlaceEl.textContent = '';
   memoryTaglineEl.textContent = creature.tagline;
   memoryTextEl.textContent = '';
   memoryTextEl.classList.remove('done');
