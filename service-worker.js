@@ -2,7 +2,7 @@
 // V2 : pré-cache COMPLET à l'install (parade au poids ~140 Mo en 4G).
 // Objectif : après une première ouverture en WiFi, tout est offline-ready.
 
-const CACHE = 'cadeau-gui-v2';
+const CACHE = 'cadeau-gui-v3';
 
 // Assets critiques : bloquants à l'install. Si un seul échoue, install échoue.
 const ASSETS_CORE = [
@@ -40,6 +40,13 @@ const ASSETS_HEAVY = [
   './images/04_abjectus_card.png',
   './images/05_bahdaccord_card.png',
   './images/06_jeboudelix_card.png',
+  // CDN externes (unpkg — leaflet + three.js). Cross-origin OK via CORS.
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+  'https://unpkg.com/three@0.160.0/build/three.module.js',
+  'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js',
+  'https://unpkg.com/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js',
+  'https://unpkg.com/three@0.160.0/examples/jsm/environments/RoomEnvironment.js',
 ];
 
 self.addEventListener('install', event => {
@@ -87,7 +94,9 @@ self.addEventListener('fetch', event => {
         req.url.includes('/models/') ||
         req.url.includes('/settings/') ||
         req.url.includes('/images/') ||
-        req.url.includes('/icons/')
+        req.url.includes('/icons/') ||
+        req.url.includes('unpkg.com/') ||
+        req.url.includes('basemaps.cartocdn.com/')  // tuiles carte visitées
       )) {
         const clone = res.clone();
         caches.open(CACHE).then(cache => cache.put(req, clone)).catch(() => {});
