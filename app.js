@@ -287,12 +287,14 @@ const mapCreatures = new Map();
 let layerClock = new THREE.Clock();
 
 function setupCreaturesLayer() {
+  console.log('[3D] setupCreaturesLayer démarré');
   const customLayer = {
     id: 'creatures-3d',
     type: 'custom',
     renderingMode: '3d',
 
     async onAdd(mapObj, gl) {
+      console.log('[3D] onAdd démarré');
       this.map = mapObj;
 
       // Scène Three.js séparée pour les créatures
@@ -330,6 +332,7 @@ function setupCreaturesLayer() {
       // doivent pas modifier les vraies lights partagées entre les 6 créatures)
       for (const c of CREATURES) {
         try {
+          console.log(`[3D] chargement ${c.id}…`);
           const wrapper = new THREE.Scene();
           const mockLights = {
             ambient: { intensity: 0.95 },
@@ -338,16 +341,25 @@ function setupCreaturesLayer() {
           };
           const mod = await import(`./${c.settingsModule}`);
           const loader = mod[c.loader];
-          if (!loader) continue;
+          if (!loader) { console.warn(`[3D] loader ${c.loader} introuvable`); continue; }
           const result = await loader(wrapper, mockLights);
 
           // Récupère les objets ajoutés au wrapper et les met dans un Group
-          // Le group reste à l'origine (identity) — sa transformation est appliquée
-          // via camera.projectionMatrix au render (pattern MapLibre officiel)
           const group = new THREE.Group();
           while (wrapper.children.length > 0) {
             group.add(wrapper.children[0]);
           }
+
+          // Fix normales inversées par le scale Y négatif (matériaux DoubleSide)
+          group.traverse((child) => {
+            if (child.isMesh && child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach(m => { if (m) m.side = THREE.DoubleSide; });
+              } else {
+                child.material.side = THREE.DoubleSide;
+              }
+            }
+          });
 
           const mercCoord = maplibregl.MercatorCoordinate.fromLngLat([c.gps.lng, c.gps.lat], 0);
           const meterUnit = mercCoord.meterInMercatorCoordinateUnits();
@@ -358,10 +370,12 @@ function setupCreaturesLayer() {
             creature: c, group, mercCoord, meterScale, update: result.update,
             captureScale: 1.0,  // multiplicateur pour l'anim de capture
           });
+          console.log(`[3D] ${c.id} chargée, meshes:`, group.children.length);
         } catch (err) {
           console.error(`[3D] chargement ${c.id} échoué`, err);
         }
       }
+      console.log(`[3D] total créatures chargées: ${mapCreatures.size}`);
       // Force un premier rendu
       mapObj.triggerRepaint();
     },
@@ -406,6 +420,8 @@ function setupCreaturesLayer() {
     },
   };
   map.addLayer(customLayer);
+  // Expose au debug pour introspection Chrome DevTools
+  window.__debug = { map, mapCreatures, customLayer };
 }
 
 // ============================================================
