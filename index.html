@@ -311,10 +311,11 @@
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(-6px); }
 
-  /* ---------------- INTRO (welcome) ---------------- */
+  /* ---------------- INTRO (welcome — clair, chaleureux) ---------------- */
   #intro {
     position: fixed; inset: 0; z-index: 700;
-    background: var(--bg);
+    background: linear-gradient(180deg, #fef3ed 0%, #fce4ec 60%, #f8d0da 100%);
+    color: #3a2a2f;
     display: none;
     flex-direction: column;
     padding: calc(var(--safe-top) + 24px) 24px calc(var(--safe-bottom) + 24px);
@@ -325,32 +326,36 @@
   #intro .icon { font-size: 56px; margin: 12px auto 18px; text-align: center; }
   #intro h1 {
     font-size: 26px; margin: 0 0 20px; text-align: center;
-    background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    background: linear-gradient(180deg, #d99b1f, #d94b8a);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   }
-  #intro .intro-lead { font-size: 16px; color: var(--text); line-height: 1.6; margin: 0 0 24px; text-align: center; max-width: 360px; margin-left: auto; margin-right: auto; }
+  #intro .intro-lead { font-size: 16px; color: #4a3439; line-height: 1.6; margin: 0 0 24px; text-align: center; max-width: 360px; margin-left: auto; margin-right: auto; }
   #intro .step {
-    background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px;
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(217,155,138,0.35);
+    border-radius: 14px;
     padding: 16px 18px; margin: 0 auto 14px; max-width: 400px;
+    box-shadow: 0 2px 12px rgba(180,110,120,0.08);
   }
   #intro .step h2 {
-    font-size: 15px; margin: 0 0 8px; color: var(--accent);
+    font-size: 15px; margin: 0 0 8px; color: #c0691a;
     text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700;
   }
-  #intro .step p { font-size: 15px; color: var(--text); line-height: 1.55; margin: 0 0 8px; }
+  #intro .step p { font-size: 15px; color: #3a2a2f; line-height: 1.55; margin: 0 0 8px; }
   #intro .step p:last-child { margin-bottom: 0; }
-  #intro .step .em { color: var(--accent-2); font-weight: 600; }
+  #intro .step .em { color: #c1477a; font-weight: 600; }
   #intro .warn {
-    border-color: var(--accent-2);
-    background: linear-gradient(135deg, rgba(255,126,182,0.08), rgba(247,201,72,0.05));
+    border-color: rgba(217,75,138,0.45);
+    background: linear-gradient(135deg, rgba(255,240,220,0.9), rgba(255,220,230,0.7));
   }
   #intro .intro-actions { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 400px; margin-left: auto; margin-right: auto; }
   #intro button {
-    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    background: linear-gradient(135deg, #f7c948, #ff7eb6);
     border: none; color: #2d2400; padding: 16px; border-radius: 12px;
     font-size: 16px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(217,75,138,0.25);
   }
-  #intro .intro-footer { margin-top: 16px; font-size: 12px; color: var(--text-dim); text-align: center; opacity: 0.7; }
+  #intro .intro-footer { margin-top: 16px; font-size: 12px; color: #7a5a60; text-align: center; opacity: 0.85; }
 </style>
 </head>
 

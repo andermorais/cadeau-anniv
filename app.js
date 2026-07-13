@@ -72,8 +72,7 @@ const map = new maplibregl.Map({
   pitch: 55,           // vue tiltée style Pokémon GO
   bearing: 0,
   attributionControl: true,
-  interactive: false,  // Gui ne peut pas déplacer/zoomer la carte manuellement (elle suit sa position)
-  cooperativeGestures: false,
+  interactive: true,   // pan + pinch-zoom + rotation OK (proche Pokémon GO officiel)
 });
 
 let meMarker = null;
