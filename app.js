@@ -341,23 +341,22 @@ function setupCreaturesLayer() {
           if (!loader) continue;
           const result = await loader(wrapper, mockLights);
 
-          // Récupère les objets ajoutés au wrapper et les met dans un Group placé
+          // Récupère les objets ajoutés au wrapper et les met dans un Group
+          // Le group reste à l'origine (identity) — sa transformation est appliquée
+          // via camera.projectionMatrix au render (pattern MapLibre officiel)
           const group = new THREE.Group();
           while (wrapper.children.length > 0) {
             group.add(wrapper.children[0]);
           }
-          // Rotation X = 90° pour orienter Y-up (modèle Meshy) vers Z-up (mercator)
-          group.rotation.x = Math.PI / 2;
 
           const mercCoord = maplibregl.MercatorCoordinate.fromLngLat([c.gps.lng, c.gps.lat], 0);
-          const scaleFactor = mercCoord.meterInMercatorCoordinateUnits() * 2.0;  // ~2 m de haut
+          const meterUnit = mercCoord.meterInMercatorCoordinateUnits();
+          // Le modèle après settings fait ~1.4 unités de haut, on veut ~2 m visibles
+          const meterScale = meterUnit * 1.5;
 
-          group.position.set(mercCoord.x, mercCoord.y, mercCoord.z);
-          group.scale.setScalar(scaleFactor);
-
-          this.scene.add(group);
           mapCreatures.set(c.id, {
-            creature: c, group, mercCoord, scaleFactor, update: result.update,
+            creature: c, group, mercCoord, meterScale, update: result.update,
+            captureScale: 1.0,  // multiplicateur pour l'anim de capture
           });
         } catch (err) {
           console.error(`[3D] chargement ${c.id} échoué`, err);
@@ -370,17 +369,39 @@ function setupCreaturesLayer() {
     render(gl, matrix) {
       const dt = layerClock.getDelta();
       const t = layerClock.elapsedTime;
+      const mapMatrix = new THREE.Matrix4().fromArray(matrix);
+      this.renderer.resetState();
 
-      // Update visibilité + anims
-      mapCreatures.forEach(({ creature, group, update }) => {
-        group.visible = !isCaptured(creature.id);
-        if (group.visible && update) update(dt, t);
+      // Rendu créature par créature avec sa propre projection matrix
+      // (translate au spot GPS + scale mètre + rotation Y-up → Z-up mercator)
+      mapCreatures.forEach((info) => {
+        const { creature, group, mercCoord, meterScale, update, captureScale } = info;
+        if (isCaptured(creature.id)) return;
+
+        // Anim mixer/breathing du modèle
+        if (update) update(dt, t);
+
+        const scale = meterScale * captureScale;
+        const rotX = new THREE.Matrix4().makeRotationX(Math.PI / 2);
+        const localMatrix = new THREE.Matrix4()
+          .makeTranslation(mercCoord.x, mercCoord.y, mercCoord.z)
+          .scale(new THREE.Vector3(scale, -scale, scale))
+          .multiply(rotX);
+
+        this.camera.projectionMatrix = mapMatrix.clone().multiply(localMatrix);
+
+        // Rend seulement ce group (masque les autres)
+        mapCreatures.forEach((info2) => {
+          info2.group.visible = (info2.creature.id === creature.id);
+        });
+        this.renderer.render(this.scene, this.camera);
       });
 
-      // La matrice MapLibre est déjà projection * view : on la met dans camera.projectionMatrix
-      this.camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix);
-      this.renderer.resetState();
-      this.renderer.render(this.scene, this.camera);
+      // Restaure visibilité (utile si la scène est inspectée ailleurs)
+      mapCreatures.forEach((info) => {
+        info.group.visible = !isCaptured(info.creature.id);
+      });
+
       this.map.triggerRepaint();
     },
   };
@@ -490,19 +511,16 @@ function triggerCapture() {
   // Flash blanc plein écran
   flashEl.classList.add('flash');
 
-  // Animer la créature sur la carte : rétrécit + tourne
+  // Animer la créature sur la carte : rétrécit (via captureScale multiplicateur)
   const info = mapCreatures.get(captured.id);
   if (info) {
     const start = performance.now();
     const duration = 450;
-    const initialScale = info.scaleFactor;
     function shrink() {
       const elapsed = performance.now() - start;
-      const t = Math.min(1, elapsed / duration);
-      const s = initialScale * (1 - t);
-      info.group.scale.setScalar(Math.max(0.0001, s));
-      info.group.rotation.z = t * Math.PI * 2;  // rotation sur l'axe vertical mercator
-      if (t < 1) requestAnimationFrame(shrink);
+      const p = Math.min(1, elapsed / duration);
+      info.captureScale = Math.max(0.0001, 1 - p);
+      if (p < 1) requestAnimationFrame(shrink);
     }
     shrink();
   }
@@ -514,11 +532,8 @@ function triggerCapture() {
     nearbyCreature = null;
     captureInProgress = false;
     hideCaptureUI();
-    // Réinitialise la taille du group pour le prochain (mais isCaptured=true → invisible)
-    if (info) {
-      info.group.scale.setScalar(info.scaleFactor);
-      info.group.rotation.z = 0;
-    }
+    // Réinitialise le captureScale pour l'anim (invisible car isCaptured=true)
+    if (info) info.captureScale = 1.0;
     showMemoryCard(captured);
   }, 750);
 }
