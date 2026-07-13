@@ -75,6 +75,19 @@ const map = new maplibregl.Map({
   interactive: true,   // pan + pinch-zoom + rotation OK (proche Pokémon GO officiel)
 });
 
+// Personnalisation style : POI commerciaux cachés + bâtiments crème chaud
+map.on('load', () => {
+  ['poi_r1', 'poi_r7', 'poi_r20'].forEach(id => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+  });
+  if (map.getLayer('building-3d')) {
+    map.setPaintProperty('building-3d', 'fill-extrusion-color', '#e8ddc8');
+  }
+  if (map.getLayer('building')) {
+    map.setPaintProperty('building', 'fill-color', '#ebe0cc');
+  }
+});
+
 let meMarker = null;
 let myPosition = null;
 let debugGpsOverride = false;  // si true, watchPosition n'écrase pas myPosition (mode debug)
