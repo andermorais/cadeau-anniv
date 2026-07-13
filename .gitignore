@@ -1,0 +1,13 @@
+# Photos originales (backup local, inutile en production)
+images/_originaux/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
