@@ -265,10 +265,8 @@ scene3D.environment = env;
 scene3D.environmentIntensity = 1.0;
 
 const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 100);
-// Reculée de z=4 à z=5.5 pour cadrer les créatures élancées (oreilles, bec, tête)
-// sans qu'elles débordent sur le HUD. Position Y remontée aussi pour bien centrer verticalement.
-camera.position.set(0, 0.8, 5.5);
-camera.lookAt(0, 0.35, 0);
+camera.position.set(0, 0.5, 4);
+camera.lookAt(0, 0.2, 0);
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.8);
 const dir = new THREE.DirectionalLight(0xffffff, 1.5);

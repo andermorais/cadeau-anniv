@@ -29,7 +29,7 @@ export async function loadTayTay(scene, lights) {
   const size = box.getSize(new THREE.Vector3()).length();
   const center = box.getCenter(new THREE.Vector3());
   model.position.sub(center);
-  model.scale.setScalar(2 / size * 0.99);  // léger ajustement
+  model.scale.setScalar(1.4 / size);  // réduit pour cadrer dans le viewport
 
   // ---------- Smooth normals ----------
   model.traverse(child => {
