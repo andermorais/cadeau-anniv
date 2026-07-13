@@ -29,6 +29,7 @@ export async function loadBahdaccord(scene, lights) {
   const center = box.getCenter(new THREE.Vector3());
   model.position.sub(center);
   model.scale.setScalar(1.4 / size);  // réduit pour cadrer dans le viewport
+  model.position.y -= 0.3;  // descend pour ne pas chevaucher le HUD titre/tagline
 
   // ---------- Smooth normals ----------
   model.traverse(child => {
