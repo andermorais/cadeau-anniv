@@ -90,16 +90,19 @@
   .gps-status.active .dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
   .gps-status.error .dot { background: #ff6b8b; }
 
-  /* ---------------- CREATURE SCENE (Three.js overlay) ---------------- */
-  /* Fond transparent : la carte 3D du jardin reste visible derrière la créature (style Pokémon GO). */
+  /* ---------------- CAPTURE OVERLAY (HUD + Pokéball par-dessus la carte 3D) ---------------- */
+  /* Les créatures sont rendues dans la carte MapLibre elle-même via custom WebGL layer.
+     Cet overlay n'est que UI : nom, tagline, Pokéball. Il laisse passer les touches carte
+     hors des zones actives (via pointer-events: none/auto). */
   #creature-scene {
     position: fixed; inset: 0; z-index: 200;
-    background: radial-gradient(ellipse at center, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.28) 100%);
+    background: transparent;
+    pointer-events: none;
     display: none;
     flex-direction: column;
   }
   #creature-scene.open { display: flex; }
-  #creature-canvas { flex: 1; width: 100%; display: block; }
+  #creature-canvas { display: none; }  /* canvas plein écran retiré : rendu on-map désormais */
   .creature-hud {
     position: absolute; top: calc(var(--safe-top) + 12px); left: 0; right: 0;
     text-align: center; pointer-events: none;
@@ -131,7 +134,12 @@
     color: var(--text); width: 36px; height: 36px; border-radius: 50%;
     font-size: 20px; cursor: pointer; backdrop-filter: blur(10px);
     display: flex; align-items: center; justify-content: center;
+    pointer-events: auto;  /* réactive pour cet élément dans un parent pointer-events:none */
   }
+  /* Réactive les touches sur les zones interactives par-dessus la carte */
+  .creature-hud { pointer-events: none; }
+  .pokeball-zone { pointer-events: none; }
+  .pokeball { pointer-events: auto; }
 
   /* Pokeball at bottom for swipe */
   .pokeball-zone {
