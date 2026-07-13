@@ -271,6 +271,7 @@ const flashEl = document.getElementById('capture-flash');
 const pokeballEl = document.getElementById('pokeball');
 
 const renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true });
+renderer.setClearAlpha(0);  // fond transparent → laisse voir la carte 3D derrière
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
