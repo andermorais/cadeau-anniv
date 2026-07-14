@@ -158,7 +158,8 @@ function updateMyPosition(lat, lng, accuracy) {
     meMarker = new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat([lng, lat])
       .addTo(map);
-    map.flyTo({ center: [lng, lat], zoom: 18, essential: true });
+    // Pas de flyTo automatique : la carte reste sur le jardin (MAP_CENTER).
+    // Gui marchera vers le jardin, son point bleu convergera vers les Pokéballs.
   } else {
     meMarker.setLngLat([lng, lat]);
   }
