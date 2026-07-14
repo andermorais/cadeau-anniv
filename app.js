@@ -86,7 +86,7 @@ map.on('webglcontextlost', () => console.warn('[WebGL] context lost'));
 map.on('webglcontextrestored', () => console.log('[WebGL] context restored'));
 
 console.log('[BOOT] map créée, en attente du load event');
-// Personnalisation style + créatures 3D sur la carte
+// Personnalisation style + markers 2D des créatures
 map.on('load', () => {
   console.log('[BOOT] map.on(load) déclenché');
   try {
@@ -99,12 +99,52 @@ map.on('load', () => {
     if (map.getLayer('building')) {
       map.setPaintProperty('building', 'fill-color', '#ebe0cc');
     }
-    console.log('[BOOT] style tweaks OK, appel setupCreaturesLayer');
-    setupCreaturesLayer();
+    setupCreatureMarkers();
   } catch (err) {
     console.error('[BOOT] map.on(load) plantage', err);
   }
 });
+
+// ---------- Markers 2D pour les 6 créatures (Pokéball ornée) ----------
+const creatureMarkers = new Map();  // id → maplibregl.Marker
+function makeMarkerElement(creature) {
+  const el = document.createElement('div');
+  el.className = 'creature-marker';
+  el.innerHTML = `
+    <svg viewBox="0 0 40 40" width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="pk-red-${creature.id}" cx="35%" cy="35%">
+          <stop offset="0%" stop-color="#ff7eb6"/>
+          <stop offset="100%" stop-color="#d94b8a"/>
+        </radialGradient>
+        <radialGradient id="pk-white-${creature.id}" cx="35%" cy="65%">
+          <stop offset="0%" stop-color="#fff"/>
+          <stop offset="100%" stop-color="#f2e0c8"/>
+        </radialGradient>
+      </defs>
+      <circle cx="20" cy="20" r="18" fill="url(#pk-red-${creature.id})" stroke="#4a2f2f" stroke-width="1.5"/>
+      <path d="M 2 20 A 18 18 0 0 0 38 20 Z" fill="url(#pk-white-${creature.id})"/>
+      <line x1="2" y1="20" x2="38" y2="20" stroke="#4a2f2f" stroke-width="1.5"/>
+      <circle cx="20" cy="20" r="5" fill="#fff" stroke="#4a2f2f" stroke-width="1.5"/>
+      <circle cx="20" cy="20" r="2" fill="#4a2f2f"/>
+    </svg>
+  `;
+  return el;
+}
+function setupCreatureMarkers() {
+  CREATURES.forEach(c => {
+    if (isCaptured(c.id)) return;
+    const el = makeMarkerElement(c);
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([c.gps.lng, c.gps.lat])
+      .addTo(map);
+    creatureMarkers.set(c.id, marker);
+  });
+}
+function removeCreatureMarker(id) {
+  const m = creatureMarkers.get(id);
+  if (m) { m.remove(); creatureMarkers.delete(id); }
+}
 
 let meMarker = null;
 let myPosition = null;
@@ -162,25 +202,18 @@ if (!introEl.classList.contains('open')) {
 }
 
 // ---------- PROXIMITY DETECTION ----------
-let nearbyCreature = null;         // la créature la plus proche à portée (< 25m)
-let captureInProgress = false;     // évite re-capture pendant l'anim de lancer
+let currentSceneCreature = null;   // créature actuellement affichée en scène plein écran
+let proximityLocked = false;       // évite re-déclenchement pendant la scène
 
 function checkProximity() {
-  if (!myPosition || captureInProgress) return;
-  let closest = null;
-  let closestDist = Infinity;
+  if (!myPosition || proximityLocked) return;
   for (const c of CREATURES) {
     if (isCaptured(c.id)) continue;
     const d = distanceMeters(myPosition, c.gps);
-    if (d <= CAPTURE_RADIUS && d < closestDist) {
-      closest = c;
-      closestDist = d;
+    if (d <= CAPTURE_RADIUS) {
+      openCreatureScene(c);
+      return;
     }
-  }
-  if (closest !== nearbyCreature) {
-    nearbyCreature = closest;
-    if (closest) showCaptureUI(closest);
-    else hideCaptureUI();
   }
 }
 
@@ -286,213 +319,105 @@ if (debugPanelHtml && !document.getElementById('debug-real-gps')) {
 }
 
 // ============================================================
-// CRÉATURES 3D SUR LA CARTE (MapLibre custom layer + Three.js)
+// CRÉATURE SCENE (Three.js plein écran quand créature proche)
 // ============================================================
-// Chaque GLB est rendu directement à sa position GPS via un custom layer WebGL
-// partagé avec MapLibre. Guillaume peut zoomer/tourner : les créatures restent
-// ancrées à leur spot dans le jardin, elles grossissent avec la proximité (perspective).
-// La scène 3D "plein écran" a été retirée. Le HUD + Pokéball sont overlays UI sur la carte.
+// Comportement Pokémon GO officiel : la carte reste visible en fond léger,
+// la créature 3D apparaît en gros au centre de l'écran quand tu es à < 25m.
 
 const sceneEl = document.getElementById('creature-scene');
+const canvasEl = document.getElementById('creature-canvas');
 const sceneNameEl = document.getElementById('scene-name');
 const sceneTaglineEl = document.getElementById('scene-tagline');
 const flashEl = document.getElementById('capture-flash');
 const pokeballEl = document.getElementById('pokeball');
 
-// Créatures placées sur la carte : id → { creature, group, mercCoord, scaleFactor, update, wrapperScene }
-const mapCreatures = new Map();
-let layerClock = new THREE.Clock();
+const renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true });
+renderer.setClearAlpha(0);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
 
-function setupCreaturesLayer() {
-  console.log('[3D] setupCreaturesLayer démarré');
-  const customLayer = {
-    id: 'creatures-3d',
-    type: 'custom',
-    renderingMode: '3d',
+const scene3D = new THREE.Scene();
+try {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene3D.environment = env;
+  scene3D.environmentIntensity = 1.0;
+  pmrem.dispose();
+} catch (e) { console.warn('PMREM env non chargée', e); }
 
-    // ⚠️ onAdd DOIT être synchrone (MapLibre spec). Le chargement des GLB est
-    // lancé en arrière-plan (fire-and-forget), render() gérera scene vide au début.
-    onAdd(mapObj, gl) {
-      console.log('[3D] onAdd démarré (sync)');
-      this.map = mapObj;
+const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 100);
+camera.position.set(0, 0.5, 4);
+camera.lookAt(0, 0.2, 0);
 
-      // Scène Three.js séparée pour les créatures
-      this.scene = new THREE.Scene();
-      this.camera = new THREE.Camera();
+const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+const dir = new THREE.DirectionalLight(0xffffff, 1.5);
+dir.position.set(2, 4, 3);
+const rim = new THREE.DirectionalLight(0xff7eb6, 0.6);
+rim.position.set(-3, 2, -2);
+scene3D.add(ambient, dir, rim);
 
-      // Éclairage uniforme
-      const ambient = new THREE.AmbientLight(0xffffff, 0.95);
-      const dirLight = new THREE.DirectionalLight(0xffffff, 1.3);
-      dirLight.position.set(2, 6, 3);
-      const rimLight = new THREE.DirectionalLight(0xff7eb6, 0.35);
-      rimLight.position.set(-3, 2, -2);
-      this.scene.add(ambient, dirLight, rimLight);
+const sceneRoot = new THREE.Group();
+scene3D.add(sceneRoot);
 
-      // Renderer partage le contexte WebGL de MapLibre
-      this.renderer = new THREE.WebGLRenderer({
-        canvas: mapObj.getCanvas(),
-        context: gl,
-        antialias: true,
-      });
-      this.renderer.autoClear = false;
-      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+let activeCreature = null;  // {model, mixer, animations, update(dt,t)}
 
-      // Environnement PBR (async safe : on tolère l'échec)
-      try {
-        const pmrem = new THREE.PMREMGenerator(this.renderer);
-        const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-        this.scene.environment = envTex;
-        this.scene.environmentIntensity = 0.7;
-        pmrem.dispose();
-      } catch (e) { console.warn('[3D] PMREM env non chargée', e); }
-
-      // Lance le chargement des GLB en arrière-plan (fire-and-forget)
-      this._loadCreatures().catch(err => console.error('[3D] loadCreatures échoué', err));
-      console.log('[3D] onAdd terminé (chargement GLB en background)');
-    },
-
-    async _loadCreatures() {
-      for (const c of CREATURES) {
-        try {
-          console.log(`[3D] chargement ${c.id}…`);
-          const wrapper = new THREE.Scene();
-          const mockLights = {
-            ambient: { intensity: 0.95 },
-            directional: { intensity: 1.3 },
-            rim: { intensity: 0.35 },
-          };
-          const mod = await import(`./${c.settingsModule}`);
-          const loader = mod[c.loader];
-          if (!loader) { console.warn(`[3D] loader ${c.loader} introuvable`); continue; }
-          const result = await loader(wrapper, mockLights);
-
-          const group = new THREE.Group();
-          while (wrapper.children.length > 0) {
-            group.add(wrapper.children[0]);
-          }
-
-          // Fix normales inversées par le scale Y négatif (matériaux DoubleSide)
-          group.traverse((child) => {
-            if (child.isMesh && child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach(m => { if (m) m.side = THREE.DoubleSide; });
-              } else {
-                child.material.side = THREE.DoubleSide;
-              }
-            }
-          });
-
-          const mercCoord = maplibregl.MercatorCoordinate.fromLngLat([c.gps.lng, c.gps.lat], 0);
-          const meterUnit = mercCoord.meterInMercatorCoordinateUnits();
-          const meterScale = meterUnit * 1.5;
-
-          this.scene.add(group);
-          mapCreatures.set(c.id, {
-            creature: c, group, mercCoord, meterScale, update: result.update,
-            captureScale: 1.0,
-          });
-          console.log(`[3D] ${c.id} chargée, meshes:`, group.children.length);
-          this.map.triggerRepaint();
-        } catch (err) {
-          console.error(`[3D] chargement ${c.id} échoué`, err);
-        }
-      }
-      console.log(`[3D] total créatures chargées: ${mapCreatures.size}`);
-    },
-
-    render(gl, matrix) {
-      if (!this._renderLogged) {
-        console.log(`[3D] render() 1er appel, ${mapCreatures.size} créatures`);
-        this._renderLogged = true;
-      }
-      try {
-        const dt = layerClock.getDelta();
-        const t = layerClock.elapsedTime;
-        const mapMatrix = new THREE.Matrix4().fromArray(matrix);
-        this.renderer.resetState();
-
-        // Optimisation GPU : rendre uniquement les créatures dans un rayon proche
-        // de myPosition (max 3 simultanées). Réduit la charge WebGL sur iPhone.
-        const RENDER_RADIUS = 150;  // mètres
-        const MAX_RENDER = 3;
-        let toRender = [];
-        if (myPosition) {
-          toRender = Array.from(mapCreatures.values())
-            .filter(info => !isCaptured(info.creature.id))
-            .map(info => ({ info, dist: distanceMeters(myPosition, info.creature.gps) }))
-            .filter(x => x.dist <= RENDER_RADIUS)
-            .sort((a, b) => a.dist - b.dist)
-            .slice(0, MAX_RENDER)
-            .map(x => x.info);
-        } else {
-          // Sans position (mode idle) : rendre toutes non-capturées, max 3
-          toRender = Array.from(mapCreatures.values())
-            .filter(info => !isCaptured(info.creature.id))
-            .slice(0, MAX_RENDER);
-        }
-
-        // Cache toutes les créatures d'abord
-        mapCreatures.forEach(info => { info.group.visible = false; });
-
-        // Rend chaque créature à sa position mercator
-        for (const info of toRender) {
-          const { creature, group, mercCoord, meterScale, update, captureScale } = info;
-          if (update) update(dt, t);
-
-          const scale = meterScale * captureScale;
-          const rotX = new THREE.Matrix4().makeRotationX(Math.PI / 2);
-          const localMatrix = new THREE.Matrix4()
-            .makeTranslation(mercCoord.x, mercCoord.y, mercCoord.z)
-            .scale(new THREE.Vector3(scale, -scale, scale))
-            .multiply(rotX);
-
-          this.camera.projectionMatrix = mapMatrix.clone().multiply(localMatrix);
-
-          // Active seulement ce group
-          mapCreatures.forEach(info2 => { info2.group.visible = false; });
-          group.visible = true;
-          this.renderer.render(this.scene, this.camera);
-        }
-
-        // Restaure la visibilité pour le prochain frame (au cas où)
-        mapCreatures.forEach(info => {
-          info.group.visible = !isCaptured(info.creature.id);
-        });
-
-        this.map.triggerRepaint();
-      } catch (err) {
-        if (!this._errLogged) {
-          console.error('[3D] render() erreur', err);
-          this._errLogged = true;
-        }
-      }
-    },
-  };
-  map.addLayer(customLayer);
-  // Expose au debug pour introspection Chrome DevTools
-  window.__debug = { map, mapCreatures, customLayer };
+async function loadCreatureModel(creature) {
+  const mod = await import(`./${creature.settingsModule}`);
+  const loader = mod[creature.loader];
+  if (!loader) throw new Error(`Loader ${creature.loader} introuvable`);
+  const lights = { ambient, directional: dir, rim };
+  return await loader(sceneRoot, lights);
 }
 
-// ============================================================
-// CAPTURE UI (HUD + Pokéball overlay quand créature proche)
-// ============================================================
-
-function showCaptureUI(creature) {
+async function openCreatureScene(creature) {
+  proximityLocked = true;
+  currentSceneCreature = creature;
   sceneNameEl.textContent = creature.name;
   sceneTaglineEl.textContent = creature.tagline;
   sceneEl.classList.add('open');
+  resizeRenderer();
+  if (activeCreature) { sceneRoot.clear(); activeCreature = null; }
+  try {
+    activeCreature = await loadCreatureModel(creature);
+  } catch (err) {
+    console.error('Erreur chargement créature', err);
+    toast('Erreur de chargement (' + creature.name + ')');
+    closeCreatureScene();
+  }
   resetPokeball();
 }
 
-function hideCaptureUI() {
+function closeCreatureScene() {
   sceneEl.classList.remove('open');
+  proximityLocked = false;
+  currentSceneCreature = null;
+  if (activeCreature) { sceneRoot.clear(); activeCreature = null; }
 }
+document.getElementById('creature-close').addEventListener('click', closeCreatureScene);
 
-// Le bouton close ferme aussi la capture UI (mais nearbyCreature reste, il reviendra vite)
-document.getElementById('creature-close').addEventListener('click', () => {
-  hideCaptureUI();
-  nearbyCreature = null;
-});
+function resizeRenderer() {
+  if (!sceneEl.classList.contains('open')) return;
+  const w = sceneEl.clientWidth;
+  const h = sceneEl.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resizeRenderer);
+
+// Render loop
+const clock = new THREE.Clock();
+function tick() {
+  requestAnimationFrame(tick);
+  if (!sceneEl.classList.contains('open')) return;
+  const dt = clock.getDelta();
+  const t = clock.elapsedTime;
+  if (activeCreature?.update) activeCreature.update(dt, t);
+  renderer.render(scene3D, camera);
+}
+tick();
 
 // ============================================================
 // POKÉBALL — swipe gesture + throw animation
@@ -500,7 +425,6 @@ document.getElementById('creature-close').addEventListener('click', () => {
 let pokeballState = 'idle';     // idle | dragging | thrown | done
 let pkStart = null;             // {x, y}
 let pkDelta = null;             // {x, y}
-let pkLockedCreature = null;    // la créature verrouillée au touchdown (résiste au GPS fluctuant)
 
 function resetPokeball() {
   pokeballEl.classList.remove('dragging', 'thrown');
@@ -508,7 +432,6 @@ function resetPokeball() {
   pokeballEl.style.opacity = '1';
   pokeballState = 'idle';
   pkStart = null; pkDelta = null;
-  pkLockedCreature = null;
 }
 
 function getTouchPoint(e) {
@@ -524,11 +447,10 @@ window.addEventListener('touchend', onPkUp);
 window.addEventListener('mouseup', onPkUp);
 
 function onPkDown(e) {
-  if (pokeballState !== 'idle' || !sceneEl.classList.contains('open') || !nearbyCreature) return;
+  if (pokeballState !== 'idle' || !sceneEl.classList.contains('open')) return;
   e.preventDefault();
   pkStart = getTouchPoint(e);
   pkDelta = { x: 0, y: 0 };
-  pkLockedCreature = nearbyCreature;  // verrouille : le GPS peut fluctuer, on garde cette cible
   pokeballEl.classList.add('dragging');
   pokeballState = 'dragging';
 }
@@ -562,33 +484,35 @@ function onPkUp(e) {
 }
 
 function throwPokeball() {
-  if (!pkLockedCreature) return;
+  if (!currentSceneCreature) return;
   pokeballState = 'thrown';
-  captureInProgress = true;
   pokeballEl.classList.add('thrown');
-  const h = window.innerHeight;
+  const h = sceneEl.clientHeight;
   const targetY = -(h * 0.55);
   pokeballEl.style.transform = `translate(0px, ${targetY}px) scale(0.45) rotate(720deg)`;
   setTimeout(() => { triggerCapture(); }, 600);
 }
 
 function triggerCapture() {
-  const captured = pkLockedCreature;
-  if (!captured) { captureInProgress = false; return; }
+  const captured = currentSceneCreature;
+  if (!captured) return;
 
   // Flash blanc plein écran
   flashEl.classList.add('flash');
 
-  // Animer la créature sur la carte : rétrécit (via captureScale multiplicateur)
-  const info = mapCreatures.get(captured.id);
-  if (info) {
+  // Animer la créature plein écran : rétrécit + tourne
+  if (activeCreature?.model) {
     const start = performance.now();
     const duration = 450;
+    const initialScale = activeCreature.model.scale.x;
+    const initialRotY = activeCreature.model.rotation.y;
     function shrink() {
       const elapsed = performance.now() - start;
-      const p = Math.min(1, elapsed / duration);
-      info.captureScale = Math.max(0.0001, 1 - p);
-      if (p < 1) requestAnimationFrame(shrink);
+      const t = Math.min(1, elapsed / duration);
+      const s = initialScale * (1 - t);
+      activeCreature.model.scale.setScalar(Math.max(0.001, s));
+      activeCreature.model.rotation.y = initialRotY + t * Math.PI * 2;
+      if (t < 1) requestAnimationFrame(shrink);
     }
     shrink();
   }
@@ -597,11 +521,8 @@ function triggerCapture() {
 
   setTimeout(() => {
     markCaptured(captured.id);
-    nearbyCreature = null;
-    captureInProgress = false;
-    hideCaptureUI();
-    // Réinitialise le captureScale pour l'anim (invisible car isCaptured=true)
-    if (info) info.captureScale = 1.0;
+    removeCreatureMarker(captured.id);  // retire la Pokéball 2D de la carte
+    closeCreatureScene();
     showMemoryCard(captured);
   }, 750);
 }

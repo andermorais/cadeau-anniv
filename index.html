@@ -90,19 +90,28 @@
   .gps-status.active .dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
   .gps-status.error .dot { background: #ff6b8b; }
 
-  /* ---------------- CAPTURE OVERLAY (HUD + Pokéball par-dessus la carte 3D) ---------------- */
-  /* Les créatures sont rendues dans la carte MapLibre elle-même via custom WebGL layer.
-     Cet overlay n'est que UI : nom, tagline, Pokéball. Il laisse passer les touches carte
-     hors des zones actives (via pointer-events: none/auto). */
+  /* ---------------- CREATURE SCENE (Three.js plein écran) ---------------- */
+  /* Style Pokémon GO encounter : créature 3D en gros au centre, léger vignette dark
+     autour pour laisser deviner la carte MapLibre derrière sans distraire. */
   #creature-scene {
     position: fixed; inset: 0; z-index: 200;
-    background: transparent;
-    pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(20,15,40,0.35) 0%, rgba(15,13,26,0.85) 100%);
     display: none;
     flex-direction: column;
   }
   #creature-scene.open { display: flex; }
-  #creature-canvas { display: none; }  /* canvas plein écran retiré : rendu on-map désormais */
+  #creature-canvas { flex: 1; width: 100%; display: block; }
+
+  /* Marker Pokéball 2D sur la carte MapLibre */
+  .creature-marker {
+    width: 40px; height: 40px; cursor: pointer;
+    filter: drop-shadow(0 3px 8px rgba(217,75,138,0.5));
+    animation: markerBob 2.5s ease-in-out infinite;
+  }
+  @keyframes markerBob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
   .creature-hud {
     position: absolute; top: calc(var(--safe-top) + 12px); left: 0; right: 0;
     text-align: center; pointer-events: none;
@@ -134,12 +143,7 @@
     color: var(--text); width: 36px; height: 36px; border-radius: 50%;
     font-size: 20px; cursor: pointer; backdrop-filter: blur(10px);
     display: flex; align-items: center; justify-content: center;
-    pointer-events: auto;  /* réactive pour cet élément dans un parent pointer-events:none */
   }
-  /* Réactive les touches sur les zones interactives par-dessus la carte */
-  .creature-hud { pointer-events: none; }
-  .pokeball-zone { pointer-events: none; }
-  .pokeball { pointer-events: auto; }
 
   /* Pokeball at bottom for swipe */
   .pokeball-zone {
