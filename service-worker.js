@@ -2,7 +2,7 @@
 // V2 : pré-cache COMPLET à l'install (parade au poids ~140 Mo en 4G).
 // Objectif : après une première ouverture en WiFi, tout est offline-ready.
 
-const CACHE = 'cadeau-gui-v18';
+const CACHE = 'cadeau-gui-v19';
 
 // Assets critiques : bloquants à l'install. Si un seul échoue, install échoue.
 const ASSETS_CORE = [

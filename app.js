@@ -469,6 +469,7 @@ document.getElementById('creature-close').addEventListener('click', () => {
 let pokeballState = 'idle';     // idle | dragging | thrown | done
 let pkStart = null;             // {x, y}
 let pkDelta = null;             // {x, y}
+let pkLockedCreature = null;    // la créature verrouillée au touchdown (résiste au GPS fluctuant)
 
 function resetPokeball() {
   pokeballEl.classList.remove('dragging', 'thrown');
@@ -476,6 +477,7 @@ function resetPokeball() {
   pokeballEl.style.opacity = '1';
   pokeballState = 'idle';
   pkStart = null; pkDelta = null;
+  pkLockedCreature = null;
 }
 
 function getTouchPoint(e) {
@@ -495,6 +497,7 @@ function onPkDown(e) {
   e.preventDefault();
   pkStart = getTouchPoint(e);
   pkDelta = { x: 0, y: 0 };
+  pkLockedCreature = nearbyCreature;  // verrouille : le GPS peut fluctuer, on garde cette cible
   pokeballEl.classList.add('dragging');
   pokeballState = 'dragging';
 }
@@ -528,7 +531,7 @@ function onPkUp(e) {
 }
 
 function throwPokeball() {
-  if (!nearbyCreature) return;
+  if (!pkLockedCreature) return;
   pokeballState = 'thrown';
   captureInProgress = true;
   pokeballEl.classList.add('thrown');
@@ -539,7 +542,7 @@ function throwPokeball() {
 }
 
 function triggerCapture() {
-  const captured = nearbyCreature;
+  const captured = pkLockedCreature;
   if (!captured) { captureInProgress = false; return; }
 
   // Flash blanc plein écran
