@@ -73,11 +73,17 @@ const map = new maplibregl.Map({
   style: 'https://tiles.openfreemap.org/styles/liberty',
   center: [MAP_CENTER.lng, MAP_CENTER.lat],  // MapLibre = [lng, lat]
   zoom: MAP_ZOOM,
-  pitch: 55,           // vue tiltée style Pokémon GO
+  minZoom: 15,
+  maxZoom: 19,          // cap pour éviter GPU OOM sur iPhone quand pincer trop fort
+  pitch: 55,            // vue tiltée style Pokémon GO
   bearing: 0,
   attributionControl: true,
-  interactive: true,   // pan + pinch-zoom + rotation OK (proche Pokémon GO officiel)
+  interactive: true,
 });
+
+// Gérer perte de contexte WebGL (iOS peut kill le context sous pression mémoire)
+map.on('webglcontextlost', () => console.warn('[WebGL] context lost'));
+map.on('webglcontextrestored', () => console.log('[WebGL] context restored'));
 
 console.log('[BOOT] map créée, en attente du load event');
 // Personnalisation style + créatures 3D sur la carte
@@ -399,42 +405,67 @@ function setupCreaturesLayer() {
         console.log(`[3D] render() 1er appel, ${mapCreatures.size} créatures`);
         this._renderLogged = true;
       }
-      const dt = layerClock.getDelta();
-      const t = layerClock.elapsedTime;
-      const mapMatrix = new THREE.Matrix4().fromArray(matrix);
-      this.renderer.resetState();
+      try {
+        const dt = layerClock.getDelta();
+        const t = layerClock.elapsedTime;
+        const mapMatrix = new THREE.Matrix4().fromArray(matrix);
+        this.renderer.resetState();
 
-      // Rendu créature par créature avec sa propre projection matrix
-      // (translate au spot GPS + scale mètre + rotation Y-up → Z-up mercator)
-      mapCreatures.forEach((info) => {
-        const { creature, group, mercCoord, meterScale, update, captureScale } = info;
-        if (isCaptured(creature.id)) return;
+        // Optimisation GPU : rendre uniquement les créatures dans un rayon proche
+        // de myPosition (max 3 simultanées). Réduit la charge WebGL sur iPhone.
+        const RENDER_RADIUS = 150;  // mètres
+        const MAX_RENDER = 3;
+        let toRender = [];
+        if (myPosition) {
+          toRender = Array.from(mapCreatures.values())
+            .filter(info => !isCaptured(info.creature.id))
+            .map(info => ({ info, dist: distanceMeters(myPosition, info.creature.gps) }))
+            .filter(x => x.dist <= RENDER_RADIUS)
+            .sort((a, b) => a.dist - b.dist)
+            .slice(0, MAX_RENDER)
+            .map(x => x.info);
+        } else {
+          // Sans position (mode idle) : rendre toutes non-capturées, max 3
+          toRender = Array.from(mapCreatures.values())
+            .filter(info => !isCaptured(info.creature.id))
+            .slice(0, MAX_RENDER);
+        }
 
-        // Anim mixer/breathing du modèle
-        if (update) update(dt, t);
+        // Cache toutes les créatures d'abord
+        mapCreatures.forEach(info => { info.group.visible = false; });
 
-        const scale = meterScale * captureScale;
-        const rotX = new THREE.Matrix4().makeRotationX(Math.PI / 2);
-        const localMatrix = new THREE.Matrix4()
-          .makeTranslation(mercCoord.x, mercCoord.y, mercCoord.z)
-          .scale(new THREE.Vector3(scale, -scale, scale))
-          .multiply(rotX);
+        // Rend chaque créature à sa position mercator
+        for (const info of toRender) {
+          const { creature, group, mercCoord, meterScale, update, captureScale } = info;
+          if (update) update(dt, t);
 
-        this.camera.projectionMatrix = mapMatrix.clone().multiply(localMatrix);
+          const scale = meterScale * captureScale;
+          const rotX = new THREE.Matrix4().makeRotationX(Math.PI / 2);
+          const localMatrix = new THREE.Matrix4()
+            .makeTranslation(mercCoord.x, mercCoord.y, mercCoord.z)
+            .scale(new THREE.Vector3(scale, -scale, scale))
+            .multiply(rotX);
 
-        // Rend seulement ce group (masque les autres)
-        mapCreatures.forEach((info2) => {
-          info2.group.visible = (info2.creature.id === creature.id);
+          this.camera.projectionMatrix = mapMatrix.clone().multiply(localMatrix);
+
+          // Active seulement ce group
+          mapCreatures.forEach(info2 => { info2.group.visible = false; });
+          group.visible = true;
+          this.renderer.render(this.scene, this.camera);
+        }
+
+        // Restaure la visibilité pour le prochain frame (au cas où)
+        mapCreatures.forEach(info => {
+          info.group.visible = !isCaptured(info.creature.id);
         });
-        this.renderer.render(this.scene, this.camera);
-      });
 
-      // Restaure visibilité (utile si la scène est inspectée ailleurs)
-      mapCreatures.forEach((info) => {
-        info.group.visible = !isCaptured(info.creature.id);
-      });
-
-      this.map.triggerRepaint();
+        this.map.triggerRepaint();
+      } catch (err) {
+        if (!this._errLogged) {
+          console.error('[3D] render() erreur', err);
+          this._errLogged = true;
+        }
+      }
     },
   };
   map.addLayer(customLayer);
