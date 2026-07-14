@@ -44,8 +44,13 @@
     font-size: 22px; cursor: pointer;
     text-shadow: 0 1px 4px rgba(0,0,0,.5);
     flex: 1;
+    display: flex; align-items: center; gap: 4px;
   }
-  .logo .heart { color: var(--accent-2); }
+  .logo-img {
+    width: 32px; height: 32px; border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+  }
+  .logo .heart { color: var(--accent-2); font-size: 20px; }
   .pokedex-btn {
     background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
     color: var(--text); padding: 8px 12px; border-radius: 20px;
@@ -340,6 +345,13 @@
   }
   #intro.open { display: flex; }
   #intro .icon { font-size: 56px; margin: 12px auto 18px; text-align: center; }
+  #intro .app-icon {
+    display: block;
+    width: 96px; height: 96px;
+    border-radius: 22px;
+    margin: 12px auto 18px;
+    box-shadow: 0 6px 24px rgba(217,75,138,0.25);
+  }
   #intro h1 {
     font-size: 26px; margin: 0 0 20px; text-align: center;
     background: linear-gradient(180deg, #d99b1f, #d94b8a);
@@ -379,7 +391,7 @@
 
   <!-- Intro / Bienvenue + Installation -->
   <div id="intro">
-    <div class="icon">🌸</div>
+    <img class="app-icon" src="icons/icon-192.png" alt="" />
     <h1>Joyeux anniversaire Gui</h1>
     <p class="intro-lead">Quelque part dans le jardin du Luxembourg, six créatures attendent. Chacune cache un morceau de notre histoire. ♥</p>
 
@@ -412,7 +424,7 @@
 
   <!-- App header -->
   <header class="app-header">
-    <div class="logo" id="logo">🌸 <span class="heart">♥</span></div>
+    <div class="logo" id="logo"><img class="logo-img" src="icons/icon-192.png" alt="" /> <span class="heart">♥</span></div>
     <button class="pokedex-btn" id="pokedex-open">📖 <span id="pokedex-count">0</span>/6</button>
   </header>
 
