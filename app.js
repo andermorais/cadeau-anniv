@@ -304,15 +304,17 @@ function setupCreaturesLayer() {
     type: 'custom',
     renderingMode: '3d',
 
-    async onAdd(mapObj, gl) {
-      console.log('[3D] onAdd démarré');
+    // ⚠️ onAdd DOIT être synchrone (MapLibre spec). Le chargement des GLB est
+    // lancé en arrière-plan (fire-and-forget), render() gérera scene vide au début.
+    onAdd(mapObj, gl) {
+      console.log('[3D] onAdd démarré (sync)');
       this.map = mapObj;
 
       // Scène Three.js séparée pour les créatures
       this.scene = new THREE.Scene();
       this.camera = new THREE.Camera();
 
-      // Éclairage uniforme (les settings modifient ces lights mais on assume valeurs médianes)
+      // Éclairage uniforme
       const ambient = new THREE.AmbientLight(0xffffff, 0.95);
       const dirLight = new THREE.DirectionalLight(0xffffff, 1.3);
       dirLight.position.set(2, 6, 3);
@@ -329,7 +331,7 @@ function setupCreaturesLayer() {
       this.renderer.autoClear = false;
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-      // Environnement PBR pour les matériaux transmissifs (blob, transmission fennec/lapin)
+      // Environnement PBR (async safe : on tolère l'échec)
       try {
         const pmrem = new THREE.PMREMGenerator(this.renderer);
         const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -338,9 +340,12 @@ function setupCreaturesLayer() {
         pmrem.dispose();
       } catch (e) { console.warn('[3D] PMREM env non chargée', e); }
 
-      // Charge chaque créature à sa position GPS
-      // Chaque loader reçoit un mock de lights (leurs tweaks d'intensité ne
-      // doivent pas modifier les vraies lights partagées entre les 6 créatures)
+      // Lance le chargement des GLB en arrière-plan (fire-and-forget)
+      this._loadCreatures().catch(err => console.error('[3D] loadCreatures échoué', err));
+      console.log('[3D] onAdd terminé (chargement GLB en background)');
+    },
+
+    async _loadCreatures() {
       for (const c of CREATURES) {
         try {
           console.log(`[3D] chargement ${c.id}…`);
@@ -355,7 +360,6 @@ function setupCreaturesLayer() {
           if (!loader) { console.warn(`[3D] loader ${c.loader} introuvable`); continue; }
           const result = await loader(wrapper, mockLights);
 
-          // Récupère les objets ajoutés au wrapper et les met dans un Group
           const group = new THREE.Group();
           while (wrapper.children.length > 0) {
             group.add(wrapper.children[0]);
@@ -374,24 +378,27 @@ function setupCreaturesLayer() {
 
           const mercCoord = maplibregl.MercatorCoordinate.fromLngLat([c.gps.lng, c.gps.lat], 0);
           const meterUnit = mercCoord.meterInMercatorCoordinateUnits();
-          // Le modèle après settings fait ~1.4 unités de haut, on veut ~2 m visibles
           const meterScale = meterUnit * 1.5;
 
+          this.scene.add(group);
           mapCreatures.set(c.id, {
             creature: c, group, mercCoord, meterScale, update: result.update,
-            captureScale: 1.0,  // multiplicateur pour l'anim de capture
+            captureScale: 1.0,
           });
           console.log(`[3D] ${c.id} chargée, meshes:`, group.children.length);
+          this.map.triggerRepaint();
         } catch (err) {
           console.error(`[3D] chargement ${c.id} échoué`, err);
         }
       }
       console.log(`[3D] total créatures chargées: ${mapCreatures.size}`);
-      // Force un premier rendu
-      mapObj.triggerRepaint();
     },
 
     render(gl, matrix) {
+      if (!this._renderLogged) {
+        console.log(`[3D] render() 1er appel, ${mapCreatures.size} créatures`);
+        this._renderLogged = true;
+      }
       const dt = layerClock.getDelta();
       const t = layerClock.elapsedTime;
       const mapMatrix = new THREE.Matrix4().fromArray(matrix);
