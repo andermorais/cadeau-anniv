@@ -224,19 +224,12 @@
   }
   .memory-text {
     font-size: 16px; line-height: 1.7; color: var(--text);
-    white-space: pre-wrap; min-height: 100px;
+    white-space: pre-wrap; min-height: 60px;
   }
-  .memory-text::after {
-    content: '▍'; color: var(--accent);
-    animation: blink 1s steps(2) infinite;
-  }
-  .memory-text.done::after { content: none; }
-  @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
   .memory-actions {
     padding: 16px 22px calc(var(--safe-bottom) + 24px);
-    display: flex; gap: 10px; opacity: 0; transition: opacity 0.4s ease 0.3s;
+    display: flex; gap: 10px;
   }
-  .memory-actions.show { opacity: 1; }
   .memory-actions .btn {
     flex: 1; background: var(--bg-elev); border: 1px solid var(--border);
     color: var(--text); padding: 14px; border-radius: 12px;

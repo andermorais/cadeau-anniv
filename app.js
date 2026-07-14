@@ -539,50 +539,17 @@ const memoryTaglineEl = document.getElementById('memory-tagline');
 const memoryTextEl = document.getElementById('memory-text');
 const memoryActionsEl = document.getElementById('memory-actions');
 
-let typewriterToken = 0;
-
-function showMemoryCard(creature, skipTypewriter = false) {
+function showMemoryCard(creature) {
   memoryPhotoEl.style.setProperty('--photo-url', `url('${creature.capturePhoto}')`);
   memoryNameEl.textContent = creature.name;
-  // Le nom du lieu n'est plus affiché (le jardin entier = le lieu du jeu)
   memoryPlaceEl.textContent = '';
   memoryTaglineEl.textContent = creature.tagline;
-  memoryTextEl.textContent = '';
-  memoryTextEl.classList.remove('done');
-  memoryActionsEl.classList.remove('show');
+  // Affichage direct de l'anecdote (plus d'effet typewriter)
+  memoryTextEl.textContent = creature.anecdote;
+  memoryTextEl.classList.add('done');
+  memoryActionsEl.classList.add('show');
   memoryEl.classList.add('open');
   memoryEl.scrollTop = 0;
-
-  if (skipTypewriter) {
-    memoryTextEl.textContent = creature.anecdote;
-    memoryTextEl.classList.add('done');
-    memoryActionsEl.classList.add('show');
-  } else {
-    typewriter(creature.anecdote);
-  }
-}
-
-function typewriter(text) {
-  const token = ++typewriterToken;
-  let i = 0;
-  const baseDelay = 26;
-  const variance = 30;
-  function step() {
-    if (token !== typewriterToken) return;
-    if (i < text.length) {
-      memoryTextEl.textContent = text.slice(0, ++i);
-      const c = text[i - 1];
-      // micro-pauses pour ponctuation
-      const pause = (c === '.' || c === '!' || c === '?') ? 380
-        : (c === ',' || c === ';' || c === ':') ? 180
-        : baseDelay + Math.random() * variance;
-      setTimeout(step, pause);
-    } else {
-      memoryTextEl.classList.add('done');
-      memoryActionsEl.classList.add('show');
-    }
-  }
-  step();
 }
 
 function closeMemoryCard() {
