@@ -19,6 +19,10 @@ import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CREATURES, CAPTURE_RADIUS, MAP_CENTER, MAP_ZOOM, distanceMeters } from './creatures.js';
 
+console.log('[BOOT] app.js module chargé');
+window.addEventListener('error', e => console.error('[BOOT] Global error:', e.message, e.filename, e.lineno));
+window.addEventListener('unhandledrejection', e => console.error('[BOOT] Unhandled rejection:', e.reason));
+
 const STATE_KEY = 'cadeau-gui-state-v1';
 const INTRO_SEEN_KEY = 'cadeau-gui-intro-seen-v1';
 
@@ -75,18 +79,25 @@ const map = new maplibregl.Map({
   interactive: true,   // pan + pinch-zoom + rotation OK (proche Pokémon GO officiel)
 });
 
+console.log('[BOOT] map créée, en attente du load event');
 // Personnalisation style + créatures 3D sur la carte
 map.on('load', () => {
-  ['poi_r1', 'poi_r7', 'poi_r20'].forEach(id => {
-    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
-  });
-  if (map.getLayer('building-3d')) {
-    map.setPaintProperty('building-3d', 'fill-extrusion-color', '#e8ddc8');
+  console.log('[BOOT] map.on(load) déclenché');
+  try {
+    ['poi_r1', 'poi_r7', 'poi_r20'].forEach(id => {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+    });
+    if (map.getLayer('building-3d')) {
+      map.setPaintProperty('building-3d', 'fill-extrusion-color', '#e8ddc8');
+    }
+    if (map.getLayer('building')) {
+      map.setPaintProperty('building', 'fill-color', '#ebe0cc');
+    }
+    console.log('[BOOT] style tweaks OK, appel setupCreaturesLayer');
+    setupCreaturesLayer();
+  } catch (err) {
+    console.error('[BOOT] map.on(load) plantage', err);
   }
-  if (map.getLayer('building')) {
-    map.setPaintProperty('building', 'fill-color', '#ebe0cc');
-  }
-  setupCreaturesLayer();
 });
 
 let meMarker = null;

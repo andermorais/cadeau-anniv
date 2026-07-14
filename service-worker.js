@@ -2,7 +2,7 @@
 // V2 : pré-cache COMPLET à l'install (parade au poids ~140 Mo en 4G).
 // Objectif : après une première ouverture en WiFi, tout est offline-ready.
 
-const CACHE = 'cadeau-gui-v16';
+const CACHE = 'cadeau-gui-v17';
 
 // Assets critiques : bloquants à l'install. Si un seul échoue, install échoue.
 const ASSETS_CORE = [
@@ -54,13 +54,17 @@ const ASSETS_HEAVY = [
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    // 1) Core : bloquant
-    await cache.addAll(ASSETS_CORE);
+    // 1) Core : bloquant. On force `cache: 'reload'` pour bypass le HTTP cache
+    //    navigateur (GitHub Pages set max-age=600 → sans ça, on cache une vieille version)
+    await Promise.all(ASSETS_CORE.map(async url => {
+      const res = await fetch(url, { cache: 'reload' });
+      if (res.ok) await cache.put(url, res.clone());
+    }));
     // 2) Heavy : non-bloquant, on tolère les échecs individuels
     const results = await Promise.allSettled(
       ASSETS_HEAVY.map(async url => {
         try {
-          const res = await fetch(url, { cache: 'no-cache' });
+          const res = await fetch(url, { cache: 'reload' });
           if (res.ok) await cache.put(url, res.clone());
         } catch (e) { /* ignore, runtime cache prendra le relais */ }
       })
