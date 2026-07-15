@@ -47,8 +47,8 @@
     display: flex; align-items: center; gap: 4px;
   }
   .logo-img {
-    width: 32px; height: 32px; border-radius: 8px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+    width: 32px; height: 32px;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
   }
   .logo .heart { color: var(--accent-2); font-size: 20px; }
   .pokedex-btn {
@@ -346,9 +346,13 @@
   #intro .app-icon {
     display: block;
     width: 96px; height: 96px;
-    border-radius: 22px;
     margin: 12px auto 18px;
-    box-shadow: 0 6px 24px rgba(217,75,138,0.25);
+    filter: drop-shadow(0 6px 18px rgba(217,75,138,0.35));
+  }
+  #intro .inline-pk {
+    width: 20px; height: 20px;
+    vertical-align: -5px;
+    filter: drop-shadow(0 1px 2px rgba(217,75,138,0.25));
   }
   #intro h1 {
     font-size: 26px; margin: 0 0 20px; text-align: center;
@@ -387,16 +391,37 @@
 
 <body>
 
+  <!-- Symbole Pokéball SVG réutilisable (fond transparent, pas de fond noir) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0" aria-hidden="true">
+    <defs>
+      <radialGradient id="pk-sym-red" cx="35%" cy="35%">
+        <stop offset="0%" stop-color="#ff7eb6"/>
+        <stop offset="100%" stop-color="#d94b8a"/>
+      </radialGradient>
+      <radialGradient id="pk-sym-white" cx="35%" cy="65%">
+        <stop offset="0%" stop-color="#fff"/>
+        <stop offset="100%" stop-color="#f2e0c8"/>
+      </radialGradient>
+    </defs>
+    <symbol id="pokeball-icon" viewBox="0 0 40 40">
+      <circle cx="20" cy="20" r="18" fill="url(#pk-sym-red)" stroke="#4a2f2f" stroke-width="1.5"/>
+      <path d="M 2 20 A 18 18 0 0 0 38 20 Z" fill="url(#pk-sym-white)"/>
+      <line x1="2" y1="20" x2="38" y2="20" stroke="#4a2f2f" stroke-width="1.5"/>
+      <circle cx="20" cy="20" r="5" fill="#fff" stroke="#4a2f2f" stroke-width="1.5"/>
+      <circle cx="20" cy="20" r="2" fill="#4a2f2f"/>
+    </symbol>
+  </svg>
+
   <!-- Intro / Bienvenue + Installation -->
   <div id="intro">
-    <img class="app-icon" src="icons/icon-192.png" alt="" />
+    <svg class="app-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#pokeball-icon"/></svg>
     <h1>Joyeux anniversaire Gui</h1>
     <p class="intro-lead">Quelque part dans le jardin du Luxembourg, six créatures attendent. Chacune cache un morceau de notre histoire. ♥</p>
 
     <div class="step warn">
       <h2>1 · Installe-moi (2 min, à la maison)</h2>
       <p>Appuie sur le bouton <span class="em">Partager</span> ↑ en bas de Safari, puis choisis <span class="em">« Sur l'écran d'accueil »</span> et confirme.</p>
-      <p>Une icône <span class="em">🌸 Cadeau Gui</span> apparaît sur ton téléphone. Lance-moi depuis là — pas depuis Safari.</p>
+      <p>Une icône <svg class="inline-pk" viewBox="0 0 40 40" aria-hidden="true"><use href="#pokeball-icon"/></svg> <span class="em">Cadeau Gui</span> apparaît sur ton téléphone. Lance-moi depuis là — pas depuis Safari.</p>
     </div>
 
     <div class="step">
@@ -422,7 +447,7 @@
 
   <!-- App header -->
   <header class="app-header">
-    <div class="logo" id="logo"><img class="logo-img" src="icons/icon-192.png" alt="" /> <span class="heart">♥</span></div>
+    <div class="logo" id="logo"><svg class="logo-img" viewBox="0 0 40 40" aria-hidden="true"><use href="#pokeball-icon"/></svg> <span class="heart">♥</span></div>
     <button class="pokedex-btn" id="pokedex-open">📖 <span id="pokedex-count">0</span>/6</button>
   </header>
 
